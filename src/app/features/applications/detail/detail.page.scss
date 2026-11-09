@@ -1,0 +1,52 @@
+.detail-dl {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: 0.5rem 1.25rem;
+
+  dt {
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+  }
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 575.98px) {
+    grid-template-columns: 1fr;
+    gap: 0 0;
+    dd {
+      margin-bottom: 0.5rem;
+    }
+  }
+}
+
+.timeline {
+  position: relative;
+}
+
+.timeline-item {
+  position: relative;
+  padding: 0 0 1rem 1.25rem;
+  border-left: 2px solid var(--bs-border-color);
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+  &::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 0.3rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bs-secondary);
+  }
+  &.t-decision::before {
+    background: var(--bs-primary);
+  }
+  &.t-reveal::before {
+    background: var(--bs-warning);
+  }
+}

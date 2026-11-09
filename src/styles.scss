@@ -1,0 +1,32 @@
+// Bootstrap 5 via Sass so theme tokens can be overridden in one place.
+$primary: #1f4fd1;
+$font-family-sans-serif:
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  'Helvetica Neue',
+  Arial,
+  sans-serif;
+$enable-shadows: false;
+
+@import 'bootstrap/scss/bootstrap';
+
+body {
+  background: var(--bs-tertiary-bg);
+  min-height: 100vh;
+}
+
+main:focus {
+  outline: none;
+}
+
+// Visible focus for keyboard users everywhere.
+:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+.card {
+  background: var(--bs-body-bg);
+}

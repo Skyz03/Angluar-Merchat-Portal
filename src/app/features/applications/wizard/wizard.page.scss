@@ -1,0 +1,67 @@
+.stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 0;
+  border-bottom: 3px solid var(--bs-border-color);
+  background: transparent;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+
+  &:disabled {
+    opacity: 0.5;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+  }
+  &.done {
+    border-color: var(--bs-success);
+    color: var(--bs-body-color);
+  }
+  &.error {
+    border-color: var(--bs-danger);
+  }
+  &.active {
+    border-color: var(--bs-primary);
+    color: var(--bs-primary);
+    font-weight: 600;
+  }
+}
+
+.stepper-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--bs-tertiary-bg);
+  font-size: 0.8rem;
+
+  .active & {
+    background: var(--bs-primary);
+    color: #fff;
+  }
+}
+
+.review-dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+
+  dt {
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+  }
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+#step-heading:focus {
+  outline: none;
+}

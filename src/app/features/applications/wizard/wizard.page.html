@@ -1,0 +1,744 @@
+<header class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <a routerLink="/applications" class="small">← Applications</a>
+    <h1 class="h3 mb-0 mt-1">{{ id() ? 'Edit application' : 'New merchant application' }}</h1>
+    @if (detail(); as d) {
+      <span class="small text-body-secondary font-monospace">{{ d.reference }}</span>
+    }
+  </div>
+
+  <!-- Auto-save status -->
+  @if (autoSave) {
+    <div class="save-status small text-end" aria-live="polite" data-testid="save-status">
+      @switch (autoSave.status()) {
+        @case ('pending') {
+          <span class="text-body-secondary">Unsaved changes…</span>
+        }
+        @case ('saving') {
+          <span class="text-body-secondary"
+            ><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving
+            draft…</span
+          >
+        }
+        @case ('saved') {
+          <span class="text-success"
+            >✓ Draft saved {{ autoSave.lastSavedAt() | date: 'HH:mm:ss' }}</span
+          >
+        }
+        @case ('error') {
+          <span class="text-danger">Couldn't save: {{ autoSave.error() }}</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger ms-2"
+            (click)="retrySave()"
+            data-testid="retry-save"
+          >
+            Retry now
+          </button>
+          <div class="text-body-secondary">
+            Your changes are kept here; we'll retry on your next edit.
+          </div>
+        }
+        @default {
+          <span class="text-body-secondary">Drafts save automatically</span>
+        }
+      }
+    </div>
+  }
+</header>
+
+@if (loading()) {
+  <div class="py-5 text-center" role="status">
+    <span class="spinner-border" aria-hidden="true"></span
+    ><span class="visually-hidden">Loading application…</span>
+  </div>
+} @else if (loadError()) {
+  <div class="alert alert-danger" role="alert">
+    {{ loadError() }} <a routerLink="/applications" class="alert-link">Back to list</a>
+  </div>
+} @else {
+  @if (backupAvailable(); as b) {
+    <div class="alert alert-info d-flex flex-wrap align-items-center gap-2" role="status">
+      <span class="me-auto"
+        >We found unsaved changes in this browser from {{ b.savedAt | date: 'MMM d, HH:mm' }}.</span
+      >
+      <button type="button" class="btn btn-sm btn-primary" (click)="restoreBackup()">
+        Restore
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="discardBackup()">
+        Discard
+      </button>
+    </div>
+  }
+
+  @if (detail()?.status === 'INFO_REQUESTED') {
+    <div class="alert alert-warning" role="status">
+      The reviewer requested more information. Check the application history, update the details and
+      resubmit.
+    </div>
+  }
+
+  <!-- Stepper -->
+  <nav aria-label="Application steps" class="mb-4">
+    <ol class="stepper list-unstyled d-flex gap-1 gap-sm-2 mb-0">
+      @for (s of steps; track s.key; let i = $index) {
+        <li class="flex-fill">
+          <button
+            type="button"
+            class="stepper-btn w-100"
+            [class.active]="i === stepIndex()"
+            [class.done]="i < stepIndex() && stepValid(i)"
+            [class.error]="
+              i <= maxReached() && i !== stepIndex() && !stepValid(i) && s.key !== 'review'
+            "
+            [disabled]="i > maxReached() + 1"
+            [attr.aria-current]="i === stepIndex() ? 'step' : null"
+            (click)="goTo(i)"
+          >
+            <span class="stepper-num">{{ i + 1 }}</span>
+            <span class="stepper-label d-none d-sm-inline">{{ s.label }}</span>
+          </button>
+        </li>
+      }
+    </ol>
+  </nav>
+  <p class="visually-hidden" aria-live="polite">{{ stepAnnouncement() }}</p>
+
+  <form
+    [formGroup]="form"
+    (ngSubmit)="isReview() ? submit() : next()"
+    novalidate
+    class="card shadow-sm"
+  >
+    <div class="card-body p-3 p-md-4">
+      <h2 id="step-heading" class="h5 mb-3" tabindex="-1">
+        Step {{ stepIndex() + 1 }} of {{ steps.length }} · {{ current().label }}
+      </h2>
+
+      @switch (current().key) {
+        <!-- ───────────── Step 1: Business ───────────── -->
+        @case ('business') {
+          <fieldset formGroupName="business" class="row g-3">
+            <legend class="visually-hidden">Business details</legend>
+            <div class="col-md-6">
+              <label class="form-label" for="legalName"
+                >Legal business name <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="legalName"
+                class="form-control"
+                formControlName="legalName"
+                autocomplete="organization"
+                [class.is-invalid]="invalid('business.legalName')"
+                [attr.aria-invalid]="invalid('business.legalName')"
+                aria-describedby="legalName-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('business.legalName')"
+                label="Legal name"
+                errorId="legalName-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="tradingName">Trading name</label>
+              <input
+                id="tradingName"
+                class="form-control"
+                formControlName="tradingName"
+                [class.is-invalid]="invalid('business.tradingName')"
+                aria-describedby="tradingName-err"
+              />
+              <app-field-error
+                [control]="ctrl('business.tradingName')"
+                label="Trading name"
+                errorId="tradingName-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="businessType"
+                >Business type <span aria-hidden="true">*</span></label
+              >
+              <select
+                id="businessType"
+                class="form-select"
+                formControlName="businessType"
+                [class.is-invalid]="invalid('business.businessType')"
+                aria-describedby="businessType-err"
+                aria-required="true"
+              >
+                <option value="">Select…</option>
+                @for (t of businessTypes; track t.value) {
+                  <option [value]="t.value">{{ t.label }}</option>
+                }
+              </select>
+              <app-field-error
+                [control]="ctrl('business.businessType')"
+                label="Business type"
+                errorId="businessType-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="registrationNumber"
+                >Registration number <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="registrationNumber"
+                class="form-control text-uppercase"
+                formControlName="registrationNumber"
+                placeholder="REG-123456"
+                [class.is-invalid]="invalid('business.registrationNumber')"
+                aria-describedby="registrationNumber-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('business.registrationNumber')"
+                label="Registration number"
+                errorId="registrationNumber-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="category"
+                >Category <span aria-hidden="true">*</span></label
+              >
+              <select
+                id="category"
+                class="form-select"
+                formControlName="category"
+                [class.is-invalid]="invalid('business.category')"
+                aria-describedby="category-err"
+                aria-required="true"
+              >
+                <option value="">Select…</option>
+                @for (c of categories; track c) {
+                  <option [value]="c">{{ c }}</option>
+                }
+              </select>
+              <app-field-error
+                [control]="ctrl('business.category')"
+                label="Category"
+                errorId="category-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="website">Website</label>
+              <input
+                id="website"
+                type="url"
+                class="form-control"
+                formControlName="website"
+                placeholder="https://"
+                autocomplete="url"
+                [class.is-invalid]="invalid('business.website')"
+                aria-describedby="website-err"
+              />
+              <app-field-error
+                [control]="ctrl('business.website')"
+                label="Website"
+                errorId="website-err"
+              />
+            </div>
+          </fieldset>
+        }
+
+        <!-- ───────────── Step 2: Contact ───────────── -->
+        @case ('contact') {
+          <fieldset formGroupName="contact" class="row g-3">
+            <legend class="visually-hidden">Contact and address</legend>
+            <div class="col-md-6">
+              <label class="form-label" for="contactName"
+                >Contact name <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="contactName"
+                class="form-control"
+                formControlName="contactName"
+                autocomplete="name"
+                [class.is-invalid]="invalid('contact.contactName')"
+                aria-describedby="contactName-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('contact.contactName')"
+                label="Contact name"
+                errorId="contactName-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="email">Email <span aria-hidden="true">*</span></label>
+              <input
+                id="email"
+                type="email"
+                class="form-control"
+                formControlName="email"
+                autocomplete="email"
+                [class.is-invalid]="invalid('contact.email')"
+                aria-describedby="email-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('contact.email')"
+                label="Email"
+                errorId="email-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="phone">Phone <span aria-hidden="true">*</span></label>
+              <input
+                id="phone"
+                type="tel"
+                class="form-control"
+                formControlName="phone"
+                placeholder="+9779812345678"
+                autocomplete="tel"
+                [class.is-invalid]="invalid('contact.phone')"
+                aria-describedby="phone-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('contact.phone')"
+                label="Phone"
+                errorId="phone-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="addressLine"
+                >Street address <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="addressLine"
+                class="form-control"
+                formControlName="addressLine"
+                autocomplete="street-address"
+                [class.is-invalid]="invalid('contact.addressLine')"
+                aria-describedby="addressLine-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('contact.addressLine')"
+                label="Street address"
+                errorId="addressLine-err"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="city">City <span aria-hidden="true">*</span></label>
+              <input
+                id="city"
+                class="form-control"
+                formControlName="city"
+                autocomplete="address-level2"
+                [class.is-invalid]="invalid('contact.city')"
+                aria-describedby="city-err"
+                aria-required="true"
+              />
+              <app-field-error [control]="ctrl('contact.city')" label="City" errorId="city-err" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="country"
+                >Country <span aria-hidden="true">*</span></label
+              >
+              <select
+                id="country"
+                class="form-select"
+                formControlName="country"
+                autocomplete="country"
+                aria-required="true"
+              >
+                @for (c of countries; track c.code) {
+                  <option [value]="c.code">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="postalCode"
+                >Postal code <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="postalCode"
+                class="form-control"
+                formControlName="postalCode"
+                autocomplete="postal-code"
+                [class.is-invalid]="invalid('contact.postalCode')"
+                aria-describedby="postalCode-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('contact.postalCode')"
+                label="Postal code"
+                errorId="postalCode-err"
+              />
+            </div>
+          </fieldset>
+        }
+
+        <!-- ───────────── Step 3: Processing ───────────── -->
+        @case ('processing') {
+          <fieldset formGroupName="processing" class="row g-3">
+            <legend class="visually-hidden">Processing profile</legend>
+            <div class="col-md-4">
+              <label class="form-label" for="monthlyVolume"
+                >Expected monthly volume (NPR) <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="monthlyVolume"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                class="form-control"
+                formControlName="monthlyVolume"
+                [class.is-invalid]="invalid('processing.monthlyVolume')"
+                aria-describedby="monthlyVolume-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('processing.monthlyVolume')"
+                label="Monthly volume"
+                errorId="monthlyVolume-err"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="averageTicket"
+                >Average ticket (NPR) <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="averageTicket"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                class="form-control"
+                formControlName="averageTicket"
+                [class.is-invalid]="invalid('processing.averageTicket')"
+                aria-describedby="averageTicket-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('processing.averageTicket')"
+                label="Average ticket"
+                errorId="averageTicket-err"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="maxTicket"
+                >Maximum ticket (NPR) <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="maxTicket"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                class="form-control"
+                formControlName="maxTicket"
+                [class.is-invalid]="invalid('processing.maxTicket')"
+                aria-describedby="maxTicket-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('processing.maxTicket')"
+                label="Maximum ticket"
+                errorId="maxTicket-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="statementDescriptor"
+                >Statement descriptor <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="statementDescriptor"
+                class="form-control"
+                maxlength="22"
+                formControlName="statementDescriptor"
+                [class.is-invalid]="invalid('processing.statementDescriptor')"
+                aria-describedby="statementDescriptor-help statementDescriptor-err"
+                aria-required="true"
+              />
+              <div id="statementDescriptor-help" class="form-text">
+                What customers see on their card statement. Max 22 characters.
+              </div>
+              <app-field-error
+                [control]="ctrl('processing.statementDescriptor')"
+                label="Statement descriptor"
+                errorId="statementDescriptor-err"
+              />
+            </div>
+          </fieldset>
+        }
+
+        <!-- ───────────── Step 4: Banking (sensitive) ───────────── -->
+        @case ('banking') {
+          <fieldset formGroupName="banking" class="row g-3">
+            <legend class="visually-hidden">Settlement bank account</legend>
+            <div class="col-12">
+              <div class="alert alert-secondary small mb-0">
+                🔒 Account number and tax ID are stored separately from the rest of the application
+                and are only ever shown masked after saving. They are never written to this
+                browser's storage.
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="bankName"
+                >Bank name <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="bankName"
+                class="form-control"
+                formControlName="bankName"
+                [class.is-invalid]="invalid('banking.bankName')"
+                aria-describedby="bankName-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('banking.bankName')"
+                label="Bank name"
+                errorId="bankName-err"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="accountHolder"
+                >Account holder name <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="accountHolder"
+                class="form-control"
+                formControlName="accountHolder"
+                [class.is-invalid]="invalid('banking.accountHolder')"
+                aria-describedby="accountHolder-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('banking.accountHolder')"
+                label="Account holder"
+                errorId="accountHolder-err"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="swiftCode"
+                >SWIFT / BIC <span aria-hidden="true">*</span></label
+              >
+              <input
+                id="swiftCode"
+                class="form-control text-uppercase"
+                formControlName="swiftCode"
+                [class.is-invalid]="invalid('banking.swiftCode')"
+                aria-describedby="swiftCode-err"
+                aria-required="true"
+              />
+              <app-field-error
+                [control]="ctrl('banking.swiftCode')"
+                label="SWIFT code"
+                errorId="swiftCode-err"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="accountNumber"
+                >Account number
+                @if (!detail()?.banking?.accountNumberMasked) {
+                  <span aria-hidden="true">*</span>
+                }
+              </label>
+              <input
+                id="accountNumber"
+                type="password"
+                inputmode="numeric"
+                class="form-control"
+                formControlName="accountNumber"
+                autocomplete="off"
+                [class.is-invalid]="invalid('banking.accountNumber')"
+                aria-describedby="accountNumber-help accountNumber-err"
+              />
+              <div id="accountNumber-help" class="form-text">
+                @if (detail()?.banking?.accountNumberMasked; as m) {
+                  On file: <span class="font-monospace">{{ m }}</span
+                  >. Leave blank to keep it.
+                } @else {
+                  Digits only, 8–18 characters.
+                }
+              </div>
+              <app-field-error
+                [control]="ctrl('banking.accountNumber')"
+                label="Account number"
+                errorId="accountNumber-err"
+              />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="taxId"
+                >Tax ID (PAN/VAT)
+                @if (!detail()?.banking?.taxIdMasked) {
+                  <span aria-hidden="true">*</span>
+                }
+              </label>
+              <input
+                id="taxId"
+                type="password"
+                class="form-control text-uppercase"
+                formControlName="taxId"
+                autocomplete="off"
+                [class.is-invalid]="invalid('banking.taxId')"
+                aria-describedby="taxId-help taxId-err"
+              />
+              <div id="taxId-help" class="form-text">
+                @if (detail()?.banking?.taxIdMasked; as m) {
+                  On file: <span class="font-monospace">{{ m }}</span
+                  >. Leave blank to keep it.
+                } @else {
+                  6–15 uppercase letters or digits.
+                }
+              </div>
+              <app-field-error
+                [control]="ctrl('banking.taxId')"
+                label="Tax ID"
+                errorId="taxId-err"
+              />
+            </div>
+          </fieldset>
+        }
+
+        <!-- ───────────── Step 5: Review ───────────── -->
+        @case ('review') {
+          <div class="row g-4">
+            <section class="col-md-6" aria-labelledby="rv-business">
+              <h3 id="rv-business" class="h6 text-uppercase text-body-secondary">
+                Business
+                <button type="button" class="btn btn-link btn-sm p-0 ms-2" (click)="goTo(0)">
+                  Edit
+                </button>
+              </h3>
+              <dl class="review-dl">
+                <dt>Legal name</dt>
+                <dd>{{ value('business.legalName') || '—' }}</dd>
+                <dt>Type</dt>
+                <dd>{{ label(businessTypes, value('business.businessType'), 'label') }}</dd>
+                <dt>Registration</dt>
+                <dd>{{ value('business.registrationNumber') || '—' }}</dd>
+                <dt>Category</dt>
+                <dd>{{ value('business.category') || '—' }}</dd>
+              </dl>
+            </section>
+            <section class="col-md-6" aria-labelledby="rv-contact">
+              <h3 id="rv-contact" class="h6 text-uppercase text-body-secondary">
+                Contact
+                <button type="button" class="btn btn-link btn-sm p-0 ms-2" (click)="goTo(1)">
+                  Edit
+                </button>
+              </h3>
+              <dl class="review-dl">
+                <dt>Name</dt>
+                <dd>{{ value('contact.contactName') || '—' }}</dd>
+                <dt>Email</dt>
+                <dd>{{ value('contact.email') || '—' }}</dd>
+                <dt>Phone</dt>
+                <dd>{{ value('contact.phone') || '—' }}</dd>
+                <dt>Address</dt>
+                <dd>
+                  {{ value('contact.addressLine') }}, {{ value('contact.city') }}
+                  {{ value('contact.postalCode') }},
+                  {{ label(countries, value('contact.country'), 'name') }}
+                </dd>
+              </dl>
+            </section>
+            <section class="col-md-6" aria-labelledby="rv-processing">
+              <h3 id="rv-processing" class="h6 text-uppercase text-body-secondary">
+                Processing
+                <button type="button" class="btn btn-link btn-sm p-0 ms-2" (click)="goTo(2)">
+                  Edit
+                </button>
+              </h3>
+              <dl class="review-dl">
+                <dt>Monthly volume</dt>
+                <dd>NPR {{ $any(value('processing.monthlyVolume')) | number }}</dd>
+                <dt>Avg / max ticket</dt>
+                <dd>
+                  NPR {{ $any(value('processing.averageTicket')) | number }} /
+                  {{ $any(value('processing.maxTicket')) | number }}
+                </dd>
+                <dt>Descriptor</dt>
+                <dd>{{ value('processing.statementDescriptor') || '—' }}</dd>
+              </dl>
+            </section>
+            <section class="col-md-6" aria-labelledby="rv-banking">
+              <h3 id="rv-banking" class="h6 text-uppercase text-body-secondary">
+                Banking
+                <button type="button" class="btn btn-link btn-sm p-0 ms-2" (click)="goTo(3)">
+                  Edit
+                </button>
+              </h3>
+              <dl class="review-dl">
+                <dt>Bank</dt>
+                <dd>{{ value('banking.bankName') || '—' }}</dd>
+                <dt>Account</dt>
+                <dd class="font-monospace">
+                  {{
+                    value('banking.accountNumber')
+                      ? '•••• ' + $any(value('banking.accountNumber')).slice(-4)
+                      : (detail()?.banking?.accountNumberMasked ?? '—')
+                  }}
+                </dd>
+                <dt>Tax ID</dt>
+                <dd class="font-monospace">
+                  {{
+                    value('banking.taxId')
+                      ? '•••• ' + $any(value('banking.taxId')).slice(-4)
+                      : (detail()?.banking?.taxIdMasked ?? '—')
+                  }}
+                </dd>
+              </dl>
+            </section>
+            <div class="col-12">
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="confirm"
+                  formControlName="confirm"
+                  [class.is-invalid]="invalid('confirm')"
+                  aria-describedby="confirm-err"
+                />
+                <label class="form-check-label" for="confirm"
+                  >I confirm the merchant provided this information and it is accurate.</label
+                >
+                <app-field-error
+                  [control]="ctrl('confirm')"
+                  label="Confirmation"
+                  errorId="confirm-err"
+                />
+              </div>
+            </div>
+          </div>
+        }
+      }
+
+      @if (submitError(); as e) {
+        <div class="alert alert-danger mt-3 mb-0" role="alert">{{ e }}</div>
+      }
+    </div>
+
+    <div class="card-footer bg-body d-flex justify-content-between gap-2 p-3">
+      <button
+        type="button"
+        class="btn btn-outline-secondary"
+        (click)="back()"
+        [disabled]="stepIndex() === 0"
+      >
+        Back
+      </button>
+      @if (isReview()) {
+        <button
+          type="submit"
+          class="btn btn-success"
+          [disabled]="submitting()"
+          data-testid="submit"
+        >
+          @if (submitting()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span
+            >Submitting…
+          } @else {
+            {{
+              detail()?.status === 'INFO_REQUESTED' ? 'Resubmit for review' : 'Submit for review'
+            }}
+          }
+        </button>
+      } @else {
+        <button type="submit" class="btn btn-primary" data-testid="next">Next</button>
+      }
+    </div>
+  </form>
+}

@@ -1,0 +1,225 @@
+<header class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+  <div>
+    <h1 class="h3 mb-0">{{ heading() }}</h1>
+    @if (page(); as p) {
+      <p class="text-body-secondary small mb-0" aria-live="polite">
+        {{ p.total }} result{{ p.total === 1 ? '' : 's' }}
+      </p>
+    }
+  </div>
+  @if (canCreate()) {
+    <a class="btn btn-primary" routerLink="/applications/new" data-testid="new-application"
+      >+ New application</a
+    >
+  }
+</header>
+
+<!-- Status counts double as quick filters (optional enhancement) -->
+@if (page()?.counts; as counts) {
+  <div class="status-chips d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Filter by status">
+    <button
+      type="button"
+      class="btn btn-sm"
+      [class]="query().status === '' ? 'btn-dark' : 'btn-outline-secondary'"
+      (click)="setQuery({ status: '', page: 1 })"
+      [attr.aria-pressed]="query().status === ''"
+    >
+      All <span class="badge text-bg-light ms-1">{{ totalCount() }}</span>
+    </button>
+    @for (s of statuses; track s) {
+      @if (counts[s]) {
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class]="query().status === s ? 'btn-dark' : 'btn-outline-secondary'"
+          (click)="setQuery({ status: s, page: 1 })"
+          [attr.aria-pressed]="query().status === s"
+        >
+          {{ statusLabel[s] }} <span class="badge text-bg-light ms-1">{{ counts[s] }}</span>
+        </button>
+      }
+    }
+  </div>
+}
+
+<form class="row g-2 align-items-end mb-3" role="search" (submit)="$event.preventDefault()">
+  <div class="col-12 col-md-6">
+    <label for="search" class="form-label small mb-1">Search</label>
+    <input
+      id="search"
+      type="search"
+      class="form-control"
+      placeholder="Business name or reference"
+      [formControl]="searchControl"
+      autocomplete="off"
+    />
+  </div>
+  <div class="col-6 col-md-3">
+    <label for="status" class="form-label small mb-1">Status</label>
+    <select
+      id="status"
+      class="form-select"
+      [value]="query().status"
+      (change)="onStatusChange($event)"
+    >
+      <option value="">All statuses</option>
+      @for (s of statuses; track s) {
+        <option [value]="s">{{ statusLabel[s] }}</option>
+      }
+    </select>
+  </div>
+  <div class="col-6 col-md-3">
+    <label for="pageSize" class="form-label small mb-1">Rows per page</label>
+    <select
+      id="pageSize"
+      class="form-select"
+      [value]="query().pageSize"
+      (change)="onPageSizeChange($event)"
+    >
+      @for (n of pageSizes; track n) {
+        <option [value]="n">{{ n }}</option>
+      }
+    </select>
+  </div>
+</form>
+
+@if (state().error; as error) {
+  <div
+    class="alert alert-danger d-flex flex-wrap align-items-center justify-content-between gap-2"
+    role="alert"
+    data-testid="list-error"
+  >
+    <span>{{ error }}</span>
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-danger"
+      (click)="retry()"
+      data-testid="retry"
+    >
+      Retry
+    </button>
+  </div>
+}
+
+<div class="table-wrap position-relative" [attr.aria-busy]="state().loading">
+  @if (state().loading) {
+    <div class="loading-bar" role="status">
+      <span class="visually-hidden">Loading applications…</span>
+    </div>
+  }
+
+  @if (page(); as p) {
+    @if (p.items.length) {
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" [class.opacity-50]="state().loading">
+          <caption class="visually-hidden">
+            Merchant applications, page
+            {{
+              p.page
+            }}
+          </caption>
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Reference</th>
+              <th scope="col">Business</th>
+              <th scope="col">Status</th>
+              <th scope="col" class="d-none d-lg-table-cell">Risk</th>
+              @if (isAdmin()) {
+                <th scope="col" class="d-none d-md-table-cell">Sales owner</th>
+              }
+              @if (user()?.role !== 'REVIEWER') {
+                <th scope="col" class="d-none d-md-table-cell">Reviewer</th>
+              }
+              <th scope="col" class="d-none d-sm-table-cell">Updated</th>
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (app of p.items; track app.id) {
+              <tr>
+                <td class="font-monospace small">{{ app.reference }}</td>
+                <td>
+                  <a
+                    [routerLink]="['/applications', app.id]"
+                    class="link-body-emphasis fw-medium"
+                    >{{ app.legalName }}</a
+                  >
+                </td>
+                <td><app-status-badge [status]="app.status" /></td>
+                <td class="d-none d-lg-table-cell"><app-risk-label [level]="app.riskLevel" /></td>
+                @if (isAdmin()) {
+                  <td class="d-none d-md-table-cell">{{ app.createdByName }}</td>
+                }
+                @if (user()?.role !== 'REVIEWER') {
+                  <td class="d-none d-md-table-cell">
+                    @if (app.assignedReviewerName) {
+                      {{ app.assignedReviewerName }}
+                    } @else {
+                      <span class="text-body-secondary">Unassigned</span>
+                    }
+                  </td>
+                }
+                <td class="d-none d-sm-table-cell small text-body-secondary">
+                  {{ app.updatedAt | date: 'MMM d, HH:mm' }}
+                </td>
+                <td class="text-end text-nowrap">
+                  @if (canEdit(app)) {
+                    <a
+                      class="btn btn-sm btn-outline-primary"
+                      [routerLink]="['/applications', app.id, 'edit']"
+                      [attr.aria-label]="'Edit ' + app.legalName"
+                      >Edit</a
+                    >
+                  } @else {
+                    <a
+                      class="btn btn-sm btn-outline-secondary"
+                      [routerLink]="['/applications', app.id]"
+                      [attr.aria-label]="'Open ' + app.legalName"
+                      >Open</a
+                    >
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+        <span class="small text-body-secondary">
+          Showing {{ (p.page - 1) * p.pageSize + 1 }}–{{
+            (p.page - 1) * p.pageSize + p.items.length
+          }}
+          of {{ p.total }}
+        </span>
+        <app-pagination
+          [page]="p.page"
+          [total]="p.total"
+          [pageSize]="p.pageSize"
+          (pageChange)="setQuery({ page: $event })"
+          label="Applications pages"
+        />
+      </div>
+    } @else {
+      <div class="text-center py-5 border rounded" data-testid="empty-state">
+        <p class="mb-2">No applications match these filters.</p>
+        @if (query().search || query().status) {
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearFilters()">
+            Clear filters
+          </button>
+        } @else if (canCreate()) {
+          <a class="btn btn-sm btn-primary" routerLink="/applications/new"
+            >Start your first application</a
+          >
+        }
+      </div>
+    }
+  } @else if (state().loading) {
+    <!-- First load skeleton -->
+    <div class="placeholder-glow" aria-hidden="true">
+      @for (i of [1, 2, 3, 4, 5]; track i) {
+        <div class="placeholder skeleton-row col-12 mb-2 rounded"></div>
+      }
+    </div>
+  }
+</div>

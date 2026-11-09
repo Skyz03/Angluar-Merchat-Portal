@@ -1,0 +1,41 @@
+.table-wrap {
+  min-height: 12rem;
+}
+
+.loading-bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 2;
+  overflow: hidden;
+  background: rgba(var(--bs-primary-rgb), 0.15);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 35%;
+    background: var(--bs-primary);
+    animation: slide 1s ease-in-out infinite;
+  }
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar::after {
+    animation: none;
+    width: 100%;
+  }
+}
+
+.skeleton-row {
+  height: 2.5rem;
+}

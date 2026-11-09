@@ -1,0 +1,211 @@
+<a routerLink="/applications" class="small">← Applications</a>
+
+@if (flash(); as f) {
+  <div class="alert alert-success alert-dismissible mt-2" role="status">
+    {{ f }}
+    <button type="button" class="btn-close" aria-label="Dismiss" (click)="flash.set(null)"></button>
+  </div>
+}
+
+@if (state().error && !app()) {
+  <div
+    class="alert alert-danger d-flex justify-content-between align-items-center mt-3"
+    role="alert"
+  >
+    <span>{{ state().error }}</span>
+    <button type="button" class="btn btn-sm btn-outline-danger" (click)="retry()">Retry</button>
+  </div>
+} @else if (!app()) {
+  <div class="py-5 text-center" role="status">
+    <span class="spinner-border" aria-hidden="true"></span
+    ><span class="visually-hidden">Loading application…</span>
+  </div>
+} @else {
+  @let a = app()!;
+  <header class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-1 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ a.legalName }}</h1>
+      <div class="d-flex flex-wrap align-items-center gap-2 small text-body-secondary">
+        <span class="font-monospace">{{ a.reference }}</span>
+        <app-status-badge [status]="a.status" />
+        <span>Risk: <app-risk-label [level]="a.riskLevel" /></span>
+        <span>Updated {{ a.updatedAt | date: 'MMM d, y, HH:mm' }}</span>
+      </div>
+    </div>
+    @if (canEdit()) {
+      <a class="btn btn-primary" [routerLink]="['/applications', a.id, 'edit']">
+        {{ a.status === 'INFO_REQUESTED' ? 'Update & resubmit' : 'Continue editing' }}
+      </a>
+    }
+  </header>
+
+  <div class="row g-4">
+    <div class="col-lg-8 d-flex flex-column gap-4">
+      <section class="card" aria-labelledby="sec-business">
+        <div class="card-header"><h2 id="sec-business" class="h6 mb-0">Business</h2></div>
+        <dl class="card-body detail-dl mb-0">
+          <dt>Legal name</dt>
+          <dd>{{ a.business.legalName || '—' }}</dd>
+          <dt>Trading name</dt>
+          <dd>{{ a.business.tradingName || '—' }}</dd>
+          <dt>Type</dt>
+          <dd>{{ businessTypeLabel(a.business.businessType) }}</dd>
+          <dt>Registration</dt>
+          <dd class="font-monospace">{{ a.business.registrationNumber || '—' }}</dd>
+          <dt>Category</dt>
+          <dd>{{ a.business.category || '—' }}</dd>
+          <!-- Rendered as text, not a link: merchant-supplied URLs are untrusted. -->
+          <dt>Website</dt>
+          <dd class="text-break">{{ a.business.website || '—' }}</dd>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="sec-contact">
+        <div class="card-header"><h2 id="sec-contact" class="h6 mb-0">Contact</h2></div>
+        <dl class="card-body detail-dl mb-0">
+          <dt>Name</dt>
+          <dd>{{ a.contact.contactName || '—' }}</dd>
+          <dt>Email</dt>
+          <dd class="text-break">{{ a.contact.email || '—' }}</dd>
+          <dt>Phone</dt>
+          <dd>{{ a.contact.phone || '—' }}</dd>
+          <dt>Address</dt>
+          <dd>
+            {{ a.contact.addressLine }}, {{ a.contact.city }} {{ a.contact.postalCode }},
+            {{ a.contact.country }}
+          </dd>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="sec-processing">
+        <div class="card-header">
+          <h2 id="sec-processing" class="h6 mb-0">Processing profile</h2>
+        </div>
+        <dl class="card-body detail-dl mb-0">
+          <dt>Monthly volume</dt>
+          <dd>NPR {{ a.processing.monthlyVolume | number }}</dd>
+          <dt>Average ticket</dt>
+          <dd>NPR {{ a.processing.averageTicket | number }}</dd>
+          <dt>Max ticket</dt>
+          <dd>NPR {{ a.processing.maxTicket | number }}</dd>
+          <dt>Descriptor</dt>
+          <dd class="font-monospace">{{ a.processing.statementDescriptor || '—' }}</dd>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="sec-banking">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h2 id="sec-banking" class="h6 mb-0">Settlement banking</h2>
+          <span class="badge text-bg-light border">🔒 Sensitive</span>
+        </div>
+        <dl class="card-body detail-dl mb-0">
+          <dt>Bank</dt>
+          <dd>{{ a.banking.bankName || '—' }}</dd>
+          <dt>Account holder</dt>
+          <dd>{{ a.banking.accountHolder || '—' }}</dd>
+          <dt>SWIFT</dt>
+          <dd class="font-monospace">{{ a.banking.swiftCode || '—' }}</dd>
+          <dt>Account number</dt>
+          <dd>
+            <app-masked-value
+              [applicationId]="a.id"
+              field="accountNumber"
+              [masked]="a.banking.accountNumberMasked"
+              [canReveal]="canReveal()"
+              label="account number"
+            />
+          </dd>
+          <dt>Tax ID</dt>
+          <dd>
+            <app-masked-value
+              [applicationId]="a.id"
+              field="taxId"
+              [masked]="a.banking.taxIdMasked"
+              [canReveal]="canReveal()"
+              label="tax ID"
+            />
+          </dd>
+        </dl>
+        @if (canReveal()) {
+          <div class="card-footer small text-body-secondary">
+            Reveals are logged to the application history and auto-hide after 30 seconds.
+          </div>
+        }
+      </section>
+    </div>
+
+    <aside class="col-lg-4 d-flex flex-column gap-4">
+      <!-- Hidden (not just disabled) for SALES and anyone not assigned: canReview() is false. -->
+      @if (canReview()) {
+        <app-review-panel
+          [applicationId]="a.id"
+          (decided)="onUpdated($event, 'Decision recorded.')"
+        />
+      }
+      @if (canAssign()) {
+        <app-assign-panel
+          [applicationId]="a.id"
+          [currentReviewerId]="a.assignedReviewerId"
+          (assigned)="onUpdated($event, 'Reviewer assigned.')"
+        />
+      }
+
+      <section class="card" aria-labelledby="sec-people">
+        <div class="card-header"><h2 id="sec-people" class="h6 mb-0">People</h2></div>
+        <dl class="card-body detail-dl mb-0">
+          <dt>Sales owner</dt>
+          <dd>{{ a.createdByName }}</dd>
+          <dt>Reviewer</dt>
+          <dd>{{ a.assignedReviewerName ?? 'Unassigned' }}</dd>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="sec-history">
+        <div class="card-header"><h2 id="sec-history" class="h6 mb-0">Risk history</h2></div>
+        <ol class="list-unstyled timeline card-body mb-0" data-testid="risk-history">
+          @for (e of a.riskHistory; track e.id) {
+            <li class="timeline-item" [class]="'t-' + e.type.toLowerCase()">
+              <div class="small text-body-secondary">
+                {{ e.at | date: 'MMM d, HH:mm' }} · {{ e.actorName }} ({{ e.actorRole }})
+              </div>
+              <div class="fw-medium">
+                @switch (e.type) {
+                  @case ('DECISION') {
+                    {{
+                      e.decision === 'APPROVE'
+                        ? 'Approved'
+                        : e.decision === 'REJECT'
+                          ? 'Rejected'
+                          : 'Requested more info'
+                    }}
+                    · risk <app-risk-label [level]="e.riskLevel ?? null" />
+                  }
+                  @case ('REVEAL') {
+                    Sensitive data viewed
+                  }
+                  @case ('ASSIGNED') {
+                    Reviewer assigned
+                  }
+                  @case ('RESUBMITTED') {
+                    Resubmitted
+                  }
+                  @case ('SUBMITTED') {
+                    Submitted for review
+                  }
+                  @default {
+                    Draft created
+                  }
+                }
+              </div>
+              @if (e.note) {
+                <div class="small">{{ e.note }}</div>
+              }
+            </li>
+          } @empty {
+            <li class="text-body-secondary small">No history yet.</li>
+          }
+        </ol>
+      </section>
+    </aside>
+  </div>
+}
